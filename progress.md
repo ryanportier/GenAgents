@@ -1,0 +1,757 @@
+Original prompt: 可以模仿 fantasy-online-2 改造小镇吗
+
+- [init] 创建进度记录文件，准备进行 fantasy-online-2 风格地图重构（仅视觉/布局层，不改合约逻辑）。
+- [impl] 在 `src/components/Map/VillageMap.tsx` 重构 `drawInfiniteRegionStructureOverlay`：
+  - 可走地块改为更统一的室内/城镇地砖（灰阶地板+拼缝+镶块）
+  - 不可走地块改为墙体/边界/地貌基底（与碰撞一致）
+  - 增加像素场景道具（书架/终端/花盆/木箱/路灯）
+  - 森林/沙地/雪地三套调色板
+- [impl] 关闭旧版大建筑随机贴图（避免风格冲突，保留开关）
+- [impl] 风格覆盖范围从“仅无限探索模式”扩展为“地图默认模式也生效”
+- [test] `npm run build` 通过。
+- [test] Playwright 客户端执行通过并产出截图：`output/web-game/shot-0.png` ~ `output/web-game/shot-5.png`。
+- [todo] 当前自动截图视角更像全局页面俯视，后续需要补一个“进入地图后聚焦主视窗”的专用 actions 流程，以便更准确校验风格细节。
+- [impl] 第二轮 fantasy-online-2 风格增强：
+  - 增加分区室内风格系统（lobby/workspace/lab/archive）
+  - 每个分区有独立地砖主色/辅色/线条/强调色
+  - 增加分区走廊导视带（横/竖）
+  - 增加分区边界隔断线与功能点缀（工位面板/实验高亮/档案木纹/大厅标记）
+  - 道具生成按分区偏移，增强区域辨识度
+- [test] `npm run build` 通过。
+- [test] Playwright 截图已更新：`output/web-game/shot-0.png`~`shot-2.png`。
+
+- [context] 新需求：在新目录做独立可玩 Binance RPG（不影响现有 map/farm）。
+- [impl] 新增独立目录与页面 `src/games/binance-rpg/BinanceRpgPage.tsx`：
+  - Canvas 顶视角像素 RPG（WASD/方向键移动、J攻击、K冲刺技能、1药水、Shift冲刺、F全屏）
+  - 无限地表生成（城镇/森林/沙地/雪地）与地貌装饰
+  - 敌人 AI、战斗、掉落、死亡复活、等级成长、经验曲线
+  - 任务循环（击败/收集/探索）与奖励（BNB + EXP）
+  - 商店交互（E 开启/关闭，购买药水、燃料，出售 Shard）
+  - 本地存档（`ga:bnb-rpg:save-v1`）
+  - 自动化测试接口：`window.render_game_to_text`、`window.advanceTime(ms)`
+- [impl] 路由接入：`/rpg`（`src/App.tsx`）
+- [impl] 导航接入：顶部导航新增 RPG 入口（`src/components/Navigation.tsx`）
+- [test] `npm run build` 通过。
+- [test] Playwright 客户端验证通过（URL: `/rpg`）：
+  - 输出状态：`output/web-game/state-0.json` ~ `state-4.json`
+  - 截图：`output/web-game/shot-0.png` ~ `shot-4.png`
+  - 已确认 `window.render_game_to_text` 与 `window.advanceTime(ms)` 可用。
+- [fix] 为满足“新目录”要求，页面迁移到 `src/games/binance-rpg/`，并修正 `useI18n` 导入路径。
+- [test] 迁移后再次 `npm run build` 与 Playwright（`shot-0.png`~`shot-2.png`）均通过。
+- [impl] 接入 OpenGameArt 实际素材（CC0）：
+  - 新增资源目录 `public/static/assets/rpg/oga/`，包含地表 tile、角色表、怪物、道具图标
+  - 在 `BinanceRpgPage.tsx` 增加素材异步加载与失败回退
+  - 地表渲染改为贴图绘制（grass/sand/ice/dirt）
+  - 玩家改为 `Warrior-Blue` 精灵动画；怪物与掉落改为 OGA sprite
+- [impl] 新增授权说明：`public/static/assets/rpg/oga/ATTRIBUTION.md`
+- [test] 再次 `npm run build` 通过。
+- [test] Playwright 截图已更新（素材版）：`output/web-game/shot-0.png`~`shot-3.png`。
+- [impl] 新增远程攻击系统（玩家+敌方）：
+  - 玩家新增远程键：`L`（兼容自动化键 `B`）发射链能弹，消耗 Gas
+  - 新增投射物系统：飞行、命中、伤害、消失、视觉绘制
+  - 敌方远程：`wisp/raider` 会间歇发射远程弹
+  - `render_game_to_text` 新增 `projectiles` 字段用于调试/自动化
+- [test] `npm run build` 通过；自动化动作触发后 Gas 从 `100` 降到 `91.7`，确认远程技能消耗与触发生效（`output/web-game/state-2.json`）。
+- [context] 新需求：将 `src/games/binance-rpg/BinanceRpgPage.tsx` 改造成“吸血鬼幸存者”式割草生存玩法。
+- [impl] 全量重构 RPG 核心循环为幸存者模式：
+  - 自动索敌攻击（玩家只负责走位）
+  - 时间驱动刷怪与强度递增（含精英波次）
+  - 经验晶体掉落与吸附拾取
+  - 等级成长 + 三选一升级（可点选或按 1/2/3）
+  - 失败结算与 R 快速重开
+  - 本地存档切换为 `ga:bnb-survivors:save-v1`
+  - 保留 `window.render_game_to_text` / `window.advanceTime(ms)` 自动化接口
+- [impl] UI 升级为幸存者风格：
+  - 画布内左上角固定战斗 HUD（HP/EXP/时间/击杀/得分）
+  - 升级弹窗覆盖层（3 张升级卡）
+  - 右侧状态/玩法/战斗日志面板
+- [tune] 完成一轮平衡修正：
+  - 前期怪潮降压、精英延后
+  - 基础血量和攻击上调
+  - 升级所需 EXP 下调，首分钟更容易进入升级节奏
+- [test] `npm run build` 通过。
+- [test] Playwright 客户端（外部权限）回归通过：
+  - 新截图：`output/web-game/shot-0.png` ~ `shot-2.png`
+  - 新状态：`output/web-game/state-0.json` ~ `state-2.json`
+  - 已确认自动攻击、怪潮、掉落、升级弹窗、键盘 1/2/3 选择逻辑可触发。
+- [assets] 按用户要求继续在 OpenGameArt page=5 筛素材并落盘到项目：
+  - 新增目录：`public/static/assets/rpg/oga-page5/raw/` 与 `public/static/assets/rpg/oga-page5/extracted/`
+  - 已下载 7 份 CC0 可商用资源（粒子/UI/城镇/Bullet/Forest/Tiny Characters/Hero）
+  - 已解压 zip 包并可直接使用（当前约 489 张图片）
+  - 新增说明文档：`public/static/assets/rpg/oga-page5/ATTRIBUTION.md`
+- [context] 新需求："没有可以升级的技能" + 主角改为何一/CZ，并具备行走动画。
+- [impl] RPG 幸存者模式新增真实技能升级体系：
+  - 新增技能类升级：`skill_split`（分裂弹）、`skill_blade`（旋刃）、`skill_nova`（雷震波）
+  - 升级池改为动态构建，且保证每次升级至少出现 1 个技能项（若技能可升）
+  - 伤害循环新增：旋刃环绕命中判定 + 雷震波周期范围伤害
+  - 新增技能可视化：旋刃轨道渲染 + 雷震波圈层特效
+- [impl] 主角替换为 NPC 像素素材：
+  - 使用 `public/static/assets/npc/heyi_walk_0~3.png`
+  - 使用 `public/static/assets/npc/cz_walk_0~3.png`
+  - 新增 `C` 键切换何一/CZ（存档保留）
+- [impl] HUD 与调试状态增强：
+  - 状态栏增加角色与三技能等级展示
+  - `render_game_to_text` 增加 `avatar/skillBladeLevel/skillNovaLevel/skillSplitLevel`
+- [fix] 兼容旧存档字段缺失，避免技能字段读取成 `NaN`。
+- [test] `npm run build` 通过。
+- [test] Playwright 回归通过，`state-0.json`~`state-2.json` 中已出现 `levelUpChoices` 包含 `skill_split`，证明技能升级选项已接入。
+- [impl] 按用户要求增强“音效 + 技能素材特效”：
+  - 新增音频系统（WebAudio + BGM）：攻击/命中/拾取/升级/选升级/Nova/死亡音效
+  - 接入背景音乐：`rpg_village02_loop.mp3`（可静音）
+  - 新增静音控制：`M` 键 + 侧边音频按钮（支持点击解锁音频）
+- [impl] 新增技能素材特效层：
+  - `spriteFxs` 特效队列（muzzle/hit/nova）
+  - 使用 OGA 粒子图集：`blood_hit_01.png`、`teleporter_hit.png`
+  - 结合已有旋刃/雷震波，画面层级更丰富
+- [impl] 战斗循环增加音效节流与触发逻辑（shoot/hit/pickup 等 cooldown），避免刷爆。
+- [fix] 角色切换 `C` 从 step 轮询改为 keydown 即时处理，避免某些输入场景下二次切换失效。
+- [test] `npm run build` 通过。
+- [test] Playwright 外部验证：
+  - 角色切换校验：`{"a0":"heyi","a1":"cz","a2":"heyi"}`
+  - 长时战斗校验：`levelUpChoices` 出现技能项（示例含 `skill_split`），`spriteFxs` 非空，说明特效正在触发。
+- [assets] 用户指定法术包接入：`https://opengameart.org/content/free-pixel-effects-pack`（CC0）
+  - 下载并解压到 `public/static/assets/rpg/free-pixel-effects-pack/`
+  - 新增版权说明：`public/static/assets/rpg/free-pixel-effects-pack/ATTRIBUTION.md`
+- [impl] RPG 技能素材特效升级：
+  - 接入新图集：`1_magicspell_spritesheet.png`、`5_magickahit_spritesheet.png`、`8_protectioncircle_spritesheet.png`、`13_vortex_spritesheet.png`
+  - 枪口/命中/Nova/旋刃视觉改为法术帧动画（100x100 frame）
+  - 保留旧 procedural fallback（素材加载失败时不崩）
+- [test] `npm run build` 通过。
+- [test] Playwright 截图验证：`output/web-game/shot-free-pixel-fx-pack.png`，状态中 `spriteFxs` 非空，说明新特效链路生效。
+- [fix] 地图 NPC 私聊继续强化：
+  - 前端把单 NPC 私聊会话长度提升到 `18` 条，发送给后端的连续上下文提升到 `12` 条。
+  - 额外发送 `conversationMemory`（最近用户关心话题 + NPC 最近结论），减少“聊着聊着忘记前文”。
+  - 聊天区继续保留自动滚到底和 `真 AI / 回退 / 开场` 来源标识。
+- [fix] Star Office 后端 `backend/app.py` 增加 NPC 口吻锚点：
+  - 按 `Market Owner / Research / Community / Risk / Ops` 等角色语义生成不同 voice guide。
+  - Prompt 明确要求把当前聊天当作连续对话，不要每轮重新自我介绍。
+  - `recentMessages` 从 `6` 条提升到 `10` 条。
+- [deploy] 由于原始 `Downloads/Star-Office-UI-master` 目录不是 git 仓库，Railway 一次部署出现 `Failed to create code snapshot`。
+  - 改为从干净临时目录 `/tmp/star-office-railway-deploy-*` 初始化 git 后重新 `railway up`，部署成功。
+- [test] 线上 `https://star-office-api-production.up.railway.app/npc-chat` 已验证返回 `provider=bankofai`、`model=gpt-5.2`、`source=ai`，并且在连续上下文下会延续 Bob 的“先看流动性，再谈热度”口吻。
+- [fix] 修复“地图私聊仍显示回退”的真实根因：
+  - 本地开发环境此前在 `localhost/127.0.0.1` 下会默认把 Star Office API 指到 `/api/star-office`，而 Vite 代理又默认转发到旧的 `http://127.0.0.1:19000`。
+  - 现已将地图与办公室页面的默认 Star Office API 改为直接使用 Railway：`https://star-office-api-production.up.railway.app`。
+  - 同时兼容迁移旧缓存：如果用户本地存的是 `/api/star-office`、`127.0.0.1:19000` 或 `localhost:19000`，会自动改成 Railway 地址。
+- [perf] 按用户反馈收小主地图渲染面积，减少卡顿：
+  - 主地图默认 `scale` 从 `0.7` 调整到 `0.55`。
+  - 地图容器高度从 `min(82vh, 1040px)` 调整到 `min(70vh, 860px)`。
+  - 中小屏下进一步收为 `min(68vh, 720px)`，测试地图也同步缩小。
+- [infra] Railway 完整版 MiroFish backend 已部署成功：
+  - 服务地址：`https://mirofish-backend-full-production.up.railway.app`
+  - `GET /health` 返回 `200`
+  - `GET /api/graph/project/list`、`GET /api/simulation/list`、`GET /api/report/list` 均正常
+- [impl] `src/components/Map/VillageMap.tsx` 默认 MiroFish API 已切到完整 Railway 服务：
+  - 新默认地址：`https://mirofish-backend-full-production.up.railway.app`
+  - 旧 graph-only 地址 `https://mirofish-backend-production.up.railway.app` 视为 legacy，浏览器本地缓存会自动迁移
+  - simulation/report 降级提示也改成针对 legacy graph-only 服务
+- [test] `npm run build` 通过（切换默认 API 后再次验证）。
+- [test] Playwright web-game 客户端再次跑通地图页：
+  - 截图：`output/web-game-mirofish-full/shot-0.png`
+  - 状态：`output/web-game-mirofish-full/state-0.json`
+  - 状态中 `graph.apiBase` 已是完整 Railway 服务地址
+- [test] 对完整 Railway 服务做了真实 smoke test：
+  - ontology: `proj_b1de2521cbc7`
+  - graph: `mirofish_0b93b58a2a604e3d`
+  - simulation: `sim_f1ef97ecb8d7`
+  - prepare task: `3d1758d5-3997-4cbe-8d29-55e1304533eb`，最终 `ready`
+  - start simulation 成功，`max_rounds=3` 实际跑完，`runner_status=completed`
+  - report 任务已启动：`report_f873949eed3a`，已可读取 outline/summary，生成仍在后台推进
+- [note] 当前 Railway 公开环境里保留了一套 smoke test 数据（project/graph/simulation/report），便于后续直接在 AI Town 面板里回填验证。若要清理，需要补 simulation 删除能力，或手动在后端存储层清理。
+- [impl] MiroFish graph agent 新增实时投射层：
+  - `run-status / profiles / interview / report` 会汇总成每个图谱 NPC 的 `miroFishProjection`
+  - 投射内容包括：状态、平台 badge、角色镜像、采访摘要、报告线索、行为 motion
+  - 地图逻辑层已接入 projection，graph NPC 会按 `broadcast / coordinate / analyze / settle / observe` 重新选路与移动
+  - 画布渲染新增 graph NPC 状态环、badge、选中/悬浮时的实时 thought fallback
+- [impl] 角色详情与右侧 Selected 卡已接入 MiroFish 投射结果：
+  - Selected 卡显示 `Projection / Role Lens / Report Lens / Interview Echo`
+  - 详情弹窗新增 `Simulation Lens / Report Lens`
+  - 采访结果改为按 agent 缓存，而不是只保留最后一次全局结果
+- [impl] 新增 smoke demo 一键载入按钮：
+  - `Load Demo / 一键载入 Demo`
+  - 自动回填 API / project / graph / simulation / prepare / report
+  - 自动刷新项目、任务、图谱人物、simulation、prepare、run-status、profiles、report
+- [test] `npm run build` 通过。
+- [test] Playwright 实测 `Load Demo` 成功：
+  - 截图：`output/mirofish-demo-loaded.png`
+  - 状态验证：`render_game_to_text` 中已出现 `demoPreset`、selected graph node projection、visibleAgents[].projection
+  - smoke 数据成功投射为 `R3 · Settled` 状态，无控制台错误
+- [assets] 新增怪物图集：`public/static/assets/rpg/roguelike-monsters/roguelikecreatures.png`（OpenGameArt roguelike-monsters）。
+- [impl] Binance RPG 敌人渲染改为 roguelike sheet：
+  - `slime` -> (col=5,row=8)
+  - `raider` -> (col=3,row=0)
+  - `wisp` -> (col=6,row=6)
+  - `golem` -> (col=5,row=2)
+  - 保留旧素材分支作为回退，避免单资源异常导致怪物不可见。
+- [docs] 新增授权说明：`public/static/assets/rpg/roguelike-monsters/ATTRIBUTION.md`（CC-BY-SA 3.0, JoeCreates）。
+- [test] `npm run build` 通过（仅保留既有 chunk size warning）。
+- [test] Playwright 回归通过（`/rpg`）：`output/web-game/shot-0.png`~`shot-2.png`、`state-0.json`~`state-2.json`；截图确认新 roguelike 怪物已渲染（人形/幽灵/重型怪）。
+- [assets] 新增地图素材包：`lpc-medieval-village-decorations`（`decoration_medieval.zip`），落盘到 `public/static/assets/rpg/lpc-medieval-village/`。
+- [impl] Binance RPG 地图渲染新增 LPC 中世纪村庄装饰层：
+  - 接入 `decorations-medieval.png` 与 `fence_medieval.png`
+  - 按瓦片哈希稀疏生成围栏、摊位、火焰动画和地形相关装饰
+  - 保留原生物群系小道具层，降低阈值避免过度拥挤
+- [docs] 新增素材授权说明：`public/static/assets/rpg/lpc-medieval-village/ATTRIBUTION.md`，并保留原始 `CREDITS-decorations-medieval.txt`。
+- [test] `npm run build` 通过。
+- [test] Playwright 回归（`/rpg`）通过，截图确认地图已出现 LPC 中世纪装饰元素（摊位、围栏、火焰、石像等）：`output/web-game/shot-0.png`~`shot-2.png`。
+- [assets] 新增武器素材包：`Kyrise's Free 16x16 RPG Icon Pack`（CC-BY 4.0），落盘 `public/static/assets/rpg/kyrise-icons/`。
+- [impl] 抽取并接入武器图标（sword/bow/arrow/staff/shield）到 `/rpg`：
+  - 自动攻击投射物改为武器像素图标渲染（按技能与分裂弹索引混合样式）
+  - 升级三选一卡片新增对应武器图标，提升可读性
+- [docs] 新增授权说明：`public/static/assets/rpg/kyrise-icons/ATTRIBUTION.md`。
+- [test] `npm run build` 通过；Playwright 回归确认投射物状态已带 `style` 字段（示例 `arrow`），截图可见红色箭矢武器弹道：`output/web-game/shot-0.png`~`shot-4.png`。
+- [assets] 新增攻击素材：`Water Magic Effect`（CC0），落盘 `public/static/assets/rpg/water-magic-effect/`。
+- [impl] `/rpg` 攻击特效升级为水系表现：
+  - 投射物新增水尾动画（保留武器图标主体）
+  - 命中特效改为水旋帧序列
+  - Nova 特效改为水漩涡帧序列
+- [docs] 新增授权说明：`public/static/assets/rpg/water-magic-effect/ATTRIBUTION.md`。
+- [test] `npm run build` 通过；Playwright 回归截图确认水系攻击特效已生效（投射物水尾 + 命中水旋）：`output/web-game/shot-1.png`~`shot-3.png`。
+- [fix] 解决“升级时只看到暗屏+LEVEL UP 文案、看不到卡片选项”的可视化问题：
+  - 在 `src/games/binance-rpg/BinanceRpgPage.tsx` 新增 `wrapCanvasText`，并将三选一升级卡片直接绘制进 canvas（含标题/描述/编号）。
+  - 增加 `B Smart Pick`（B 推荐）在 canvas 卡片上的显式标记，避免仅 DOM 覆层场景下信息缺失。
+- [test] `npm run build` 通过。
+- [test] Playwright 回归（无自动选择）确认升级卡片可在 canvas 中完整显示：
+  - `output/web-game-levelup-canvas/shot-3.png`
+  - `output/web-game-levelup-canvas/state-3.json`（`levelUpChoices` 非空）
+- [test] Playwright 回归（含 B 智能选择）确认元素链路仍正常：
+  - 水系普通攻击：`output/web-game-element-check/state-1.json`（`element":"water"`）
+  - 雷系分裂弹：`output/web-game-element-check/state-17.json`（`element":"thunder"`）
+  - 冰系 Nova：`output/web-game-element-check/state-19.json`（`spriteFxs` 含 `element":"ice"`）
+- [context] 新需求：使用 `https://opengameart.org/content/3x-updated-32x32-scifi-roguelike-enemies` 增加怪物与 Boss。
+- [note] 当前环境 DNS 无法解析 `opengameart.org`（`curl: Could not resolve host`），因此本轮先基于已落地本地图集 `public/static/assets/rpg/roguelike-monsters/roguelikecreatures.png` 完成怪物/Boss 扩展。
+- [impl] `src/games/binance-rpg/BinanceRpgPage.tsx` 扩展敌人体系：
+  - 新增怪物种类：`rat` / `spider` / `bat` / `serpent`
+  - 新增 Boss：`boss_reaper` / `boss_hydra`
+  - 更新敌人基础数值与地貌刷怪分布逻辑（不同 biome 对应不同怪物倾向）
+  - 精英波改为“巨像 + 地貌精英”组合；新增 Boss 波次（约每 90 秒）
+  - Boss 死亡额外经验与补给掉落
+  - 敌人渲染支持新 sprite 坐标、Boss 放大、Boss 血条与标签
+  - `render_game_to_text` 新增 `bossesAlive` / `bossKindsAlive`
+  - 玩法说明文案更新为“58 秒精英、90 秒 Boss”
+- [test] `npm run build` 通过。
+- [test] Playwright（提权）验证通过：
+  - 截图：`output/web-game-boss-wave3/shot-0.png`
+  - 状态：`output/web-game-boss-wave3/state-0.json`
+  - 状态中出现 `bossesAlive: 2` 且 `bossKindsAlive:["boss_reaper","boss_hydra"]`，确认 Boss 刷新链路生效。
+- [todo] 若网络恢复，补接用户指定的 scifi 敌人包（32x32）并替换/新增一组“赛博怪”与机甲 Boss 贴图。
+- [context] 新需求：`https://opengameart.org/content/16x16-assorted-rpg-icons`，增加药水掉落和装备掉落。
+- [note] 当前环境仍无法解析 `opengameart.org`（DNS 失败），本轮直接复用项目内已存在的 `kyrise-icons` 资源实现。
+- [context] 新需求：把 `/office` 的“实时办公室对话”升级成真 AI，而不是仅靠规则模板生成。
+- [impl] `Star-Office-UI` 后端新增 `POST /office-chat`：
+  - 文件：`/Users/tommy/Downloads/Star-Office-UI-master/backend/app.py`
+  - 使用 `BANKOFAI_API_KEY / BANKOFAI_BASE_URL / BANKOFAI_MODEL`
+  - 根据办公室成员、BNB 行情、BSC 链上状态、Binance Skills 和最近对话生成 2 句短对话
+  - 输出严格 JSON；若模型不可用则自动回退到原有规则文案
+- [impl] `/Users/tommy/clawd/generative-agents-ts/src/pages/LobsterOfficePage.tsx`
+  - 实时对话循环改为优先调用 `/office-chat`
+  - 新增 `officeChatMode`（`ai / fallback / idle`）与面板状态 badge
+  - 为避免定时器因消息更新被重置，新增 `officeMessagesRef`
+  - 本地开发环境默认后端地址改为 `/api/star-office`，方便走 Vite 代理
+- [test] `python3 -m py_compile /Users/tommy/Downloads/Star-Office-UI-master/backend/app.py` 通过。
+- [test] `curl -X POST http://127.0.0.1:19002/office-chat ...` 返回 `provider=bankofai` 且含 2 条对话消息。
+- [test] `npm run build` 通过。
+- [test] Playwright 浏览器验证：
+  - 输出：`/Users/tommy/clawd/generative-agents-ts/output/playwright/lobster-office-ai/state.json`
+  - 截图：`/Users/tommy/clawd/generative-agents-ts/output/playwright/lobster-office-ai/page.png`
+  - 已确认 `officeChatMode = "ai"` 且 `latestMessage.source = "ai"`
+- [impl] 地图页 `BSC Live Talk` 也切到同一套 `POST /office-chat`：
+  - 文件：`/Users/tommy/clawd/generative-agents-ts/src/components/Map/VillageMap.tsx`
+  - 右下角实时讨论窗口现在优先走 AI，保留 fallback 文案兜底
+  - 新增 `npcLiveChat.mode` 与消息 `source`
+  - 本地开发默认走 `/api/star-office`，线上默认直连 `https://star-office-api-production.up.railway.app`
+- [test] `npm run build` 通过。
+- [test] Playwright 地图页验证：
+  - 输出：`/Users/tommy/clawd/generative-agents-ts/output/playwright/map-live-chat-ai/state.json`
+  - 截图：`/Users/tommy/clawd/generative-agents-ts/output/playwright/map-live-chat-ai/page.png`
+  - 已确认 `npcLiveChat.mode = "ai"` 且 `latest[*].source = "ai"`
+- [assets] 新增并整理图标到 `public/static/assets/rpg/kyrise-icons/curated/`：
+  - `potion_02b.png`（生命药剂）
+  - `potion_03f.png`（狂热药剂）
+  - `helmet_01a.png`（护甲装备）
+- [impl] `src/games/binance-rpg/BinanceRpgPage.tsx` 掉落系统扩展：
+  - `SupplyKind` 新增：`potion_hp`、`potion_fury`、`equip_blade`、`equip_armor`
+  - 地图随机补给池 `pickSupplyKind` 增加药水/装备权重
+  - 击杀掉落 `dropGemsFromEnemy` 新增普通怪概率掉落，Boss 必掉多件药水/装备
+  - 拾取效果 `pickupSupply` 新增：
+    - `potion_hp`：高额回血
+    - `potion_fury`：攻击+攻速
+    - `equip_blade`：攻击+穿透
+    - `equip_armor`：护甲+生命上限+回复
+  - `drawSupply` 扩展图标与发光色，药水/装备可视觉区分
+  - OGA 资源加载新增 `iconPotionRed/iconPotionBlue/iconHelmet`
+  - 玩法文案更新为“随机刷药水与装备”
+- [test] `npm run build` 通过。
+- [test] Playwright（提权）回归通过：
+  - 截图：`output/web-game-loot-drop/shot-0.png`
+  - 状态：`output/web-game-loot-drop/state-0.json`
+  - `supplies` 中已出现新增类型示例：`"kind":"potion_hp"`。
+- [context] 新需求：`https://opengameart.org/content/zelda-like-tilesets-and-sprites` 优化地图。
+- [note] 当前环境仍无法解析 `opengameart.org`，本轮基于现有素材实现 Zelda-like 地图优化（不改战斗/合约逻辑）。
+- [impl] `src/games/binance-rpg/BinanceRpgPage.tsx` 地形渲染重构：
+  - 新增 `isRoadTile` 道路网络（可重复、可扩展的网格+扰动）
+  - 新增 `isWaterTile` 水域生成（按 biome 动态阈值）
+  - 新增 `drawWorldTile` 统一地表绘制：基础地块 + 道路(dirt) + 水体叠加 + 岸线描边
+  - 新增群系边缘过渡混合（减轻地貌硬切）
+  - 仅在非道路/非水域绘制村庄装饰与植被，提高画面一致性
+  - 玩法文案补充“Zelda 风格地貌”说明
+- [test] `npm run build` 通过。
+- [test] Playwright（提权）地图截图验证：
+  - 截图：`output/web-game-map-zelda-opt/shot-0.png`
+  - 状态：`output/web-game-map-zelda-opt/state-0.json`
+  - 画面已显示明显道路网络、水域块与岸线过渡。
+- [impl] Zelda 风格地图二次优化（`src/games/binance-rpg/BinanceRpgPage.tsx`）：
+  - 道路边缘改为“切边融合”而非整块方形 dirt（按上下左右连通性自动收边）
+  - 道路单向段新增中心浅色压痕线，增强路径可读性
+  - 水域新增浅滩岸线与泡沫线，降低方块感
+  - 河湖四角与边缘补充地表回填，过渡更自然
+  - 村庄装饰改为仅刷在“非道路且非水域”地块，避免遮挡路径
+- [test] 二次优化后再次 `npm run build` 通过。
+- [test] Playwright 回归（`/rpg`）通过：
+  - 截图：`output/web-game-map-zelda-opt3/shot-0.png`、`shot-1.png`
+  - 状态：`output/web-game-map-zelda-opt3/state-0.json`、`state-1.json`
+  - 已确认地图道路收边与水岸过渡仍与战斗循环兼容。
+- [context] 新需求：`https://opengameart.org/content/golden-ui-bigger-than-ever-edition`，做窗口与装备窗优化。
+- [note] 当前环境仍无法解析 `opengameart.org`（DNS 失败）；本轮先基于现有本地素材实现“Golden UI”风格。
+- [impl] `src/games/binance-rpg/BinanceRpgPage.tsx`：
+  - 新增玩家装备阶级字段：`weaponTier`、`armorTier`（默认值、存档读取、链路兼容）
+  - 装备掉落(`equip_blade`/`equip_armor`)拾取时会提升对应阶级并写日志
+  - 新增装备阶级辅助函数：`gearTierInfo`、`weaponBonusFromTier`、`armorBonusFromTier`
+  - `render_game_to_text` 增加 `weaponTier` / `armorTier`
+  - 右侧新增独立“装备窗口”：武器/护甲/法术回路三槽，展示阶级、词条与加成
+  - 全侧栏卡片与升级弹窗改为金色像素窗口主题（边框、光泽、内嵌线、按钮/标题统一）
+- [test] `npm run build` 通过。
+- [test] Playwright 回归（`/rpg`）通过：`output/web-game-golden-ui/shot-0.png`、`shot-1.png`；状态输出含新增装备字段。
+- [fix] 修复“站桩时贴脸怪不受击 & 多子弹命中不稳定”问题（`src/games/binance-rpg/BinanceRpgPage.tsx`）：
+  - 自动攻击改为“每颗子弹独立锁定候选敌人”（不再统一扇形散射）
+  - 新增 `facingUnit`，目标与玩家重叠时用朝向向量兜底，避免方向退化
+  - 子弹出生点改为基于目标距离的动态偏移（近身时可在玩家附近/中心生成）
+  - 子弹碰撞流程改为“位移前判碰撞 + 位移后再判碰撞”，修复重叠漏判
+  - 同一帧增加 `hitEnemyIds` 去重，避免前后两次判定重复命中同一敌人
+- [test] `npm run build` 通过。
+- [test] 站桩回归（自动按 B 跳过升级）通过：
+  - 输出：`output/web-game-hitfix-stationary-b/state-0.json`
+  - 结果：`elapsed=46.02`、`kills=39`，说明角色不移动也可持续击杀近身怪物。
+- [fix] 修复“雷震波/多子弹出现正方形涂层”问题（`src/games/binance-rpg/BinanceRpgPage.tsx`）：
+  - 雷系/冰系投射物去掉 `source-atop + fillRect` 方形着色
+  - 改为圆形发光叠加（`arc`）避免方块边框
+  - 通用特效 `drawSheetFrame` 的 tint 同步改为径向光晕，移除矩形覆盖
+- [test] `npm run build` 通过；回归截图：`output/web-game-fx-square-fix/shot-0.png`、`output/web-game-fx-square-fix-thunder/shot-0.png`。
+- [context] 用户确认继续推进「AI 小镇向 Web4 靠拢」能力落地。
+- [impl] `src/components/Map/VillageMap.tsx`：为 Agent 行为日志扩展可验证凭证字段（`signer` / `chainId` / `payload` / `intentHash` / `signature` / `previousReceiptHash` / `receiptHash`）。
+- [impl] 新增 Web4 凭证工具函数：
+  - 生成收据哈希链（`buildAgentActionReceiptHash`）
+  - 旧日志规范化与链补齐（`loadAgentActionLogs`）
+  - 本地签名/哈希校验（`verifyAgentActionLog`）
+- [impl] `executeAction` 流程升级：
+  - 上链前先签名意图（钱包签名）
+  - 记录 `intentHash` 与签名
+  - 成功后写入可追溯收据哈希链
+- [impl] 地图 Agent 面板新增 Web4 交互：
+  - `校验凭证`
+  - `复制头哈希`
+  - `导出凭证`（JSON Bundle）
+  - 新增 `Web4 Proof` 状态卡（总数/通过校验/最新意图/头哈希/最新状态）
+- [impl] Agent 行为日志列表增加校验态显示（Signed / Legacy / Invalid）。
+- [docs] `README.md` 增加「Web4 对齐（Map 内已落地）」章节，说明身份校验、意图签名、凭证链、导出能力。
+- [test] `npm run build` 通过。
+- [test] Playwright 快照：`output/web4-proof-map/shot-0.png`（仅 canvas 视图，验证地图可正常渲染）。
+- [context] 用户确认继续：将 AI 小镇与 Conway 结合（可执行落地）。
+- [impl] 新增 Conway Runtime 客户端：`src/core/conway/runtime.ts`
+  - `createSandbox` / `getSandbox` / `stopSandbox` / `runAgentLoop`
+  - 环境变量配置读取（base/apiKey/projectId）
+  - 统一错误处理 + 响应兼容解析
+- [impl] `VillageMap` 接入 Conway 控制流：
+  - 新增运行态持久化 key：`ga:map:conway-runtime-v1`
+  - 新增面板状态与按钮：创建 / 同步 / 运行 Agent / 停止
+  - 支持 sandboxId 手工输入、Agent 指令输入、运行输出展示
+  - 将 Conway 状态（status/url/lastRun）写入 localStorage，刷新不丢
+- [impl] `vite-env` 与 `.env.example` 增加 Conway 配置项：
+  - `VITE_CONWAY_API_BASE`
+  - `VITE_CONWAY_API_KEY`
+  - `VITE_CONWAY_PROJECT_ID`
+- [docs] `README.md` 更新：补充 Conway 集成能力与配置说明。
+- [test] `npm run build` 通过。
+- [test] Playwright 客户端回归（/map）通过，截图输出：`output/web-game-conway-map/shot-0.png`。
+- [note] 现有 web_game_playwright_client 默认只抓 canvas，无法直接验证侧边 Conway 面板 UI 细节；如需 UI 级回归需换整页截图脚本/能力。
+- [docs] Conway 集成补充“HTTP 网关约定”说明，明确前端依赖服务端代理（不是浏览器直接调用 MCP）。
+- [test] 变更后再次 `npm run build` 通过。
+- [impl] Conway 集成改为“生产安全模式”默认：
+  - 前端默认走 `VITE_CONWAY_PROXY_BASE`（默认 `/api/conway`）
+  - 仅保留 `VITE_CONWAY_API_BASE + VITE_CONWAY_API_KEY` 作为开发直连兜底
+- [impl] 新增 Vercel Serverless 代理：`api/conway/[...path].ts`
+  - 仅放行 `sandboxes` 路径
+  - 后端注入 `Authorization: Bearer CONWAY_API_KEY`
+  - 可选注入 `CONWAY_PROJECT_ID`
+  - 前端不再必须持有 Conway Key
+- [impl] 更新 `vercel.json`，显式保留 `/api/*` 路由，避免 SPA rewrite 覆盖 API。
+- [impl] `VillageMap` Conway 面板新增运行模式展示（后端代理/直连开发），并更新“未配置”提示到代理方案。
+- [docs] README/.env 示例更新为代理优先配置，并补充服务端变量：`CONWAY_API_BASE`、`CONWAY_API_KEY`、`CONWAY_PROJECT_ID`。
+- [test] `npm run build` 通过。
+- [context] 新需求："首页布局太多太乱了，根据 Conway 重新改造"。
+- [impl] 新增 Conway 首页：`src/pages/HomePage.tsx`
+  - 默认路由改为 `/` 展示首页，不再直接跳转 `/map`
+  - 首页信息结构改为 3 层：Hero（核心入口）/ Conway 流程 / 快捷卡片
+  - 保留关键链上信息（钱包、NFA 数、Farm/Token/NFA 合约短地址）
+  - 文案和按钮全部中英双语
+- [impl] 导航重构：`src/components/Navigation.tsx`
+  - 主导航精简为：Home / Map / Farm / RPG
+  - 次级入口折叠到 `More` 下拉（Lottery / Mint / Whitepaper / My NFA）
+  - 钱包和语言切换保持原逻辑
+- [impl] 路由更新：`src/App.tsx`
+  - 新增 `HomePage` 引入并挂载 `/`
+- [test] `npm run build` 通过。
+- [test] Playwright（提权）抓取新首页成功：`output/web-game/shot-0.png`；确认首屏信息显著收敛、布局清晰。
+- [context] 新需求：点击小人自动弹出验证，交互更友好。
+- [impl] `src/components/Map/VillageMap.tsx` 新增 Agent 自动验证状态：
+  - 新增 `AgentAutoVerifyState` + `AgentVerifyUiStatus`
+  - 新增 `runAutoVerifyForAgent()`：点击小人后自动执行
+    - NFT Agent：自动读取 `ownerOf(tokenId)` 做身份验证
+    - 同时读取该 Agent 最近凭证并执行 `verifyAgentActionLog`
+    - 支持旧记录/无记录/失败/通过四类结果
+    - 自动写入持有人地址到 `ownerAddress`
+  - 非 NFT/NPC：显示“无需链上身份验证/不适用”
+- [impl] 点击地图小人后，除了选中角色外会自动触发验证流程（无需再手动点“验证身份”）。
+- [impl] 角色档案弹窗新增“自动验证”区块：
+  - 身份状态 badge
+  - 凭证状态 badge
+  - 详细说明文案
+  - 凭证交易链接（若存在）
+  - “重新验证”按钮
+- [test] `npm run build` 通过。
+- [fix] 修复地图拖动后点击小人无响应：`src/components/Map/VillageMap.tsx` 的 `toTilePos` 坐标换算去掉了对 `wrap.scrollLeft/scrollTop` 的重复叠加，改为基于 `canvas.getBoundingClientRect()` + `canvas.width/height` 比例换算，避免滚动后点击坐标偏移。
+- [test] `npm run build` 通过。
+- [test] Playwright 回归（提权）验证：拖动地图后仍可点击选中小人（结果文件 `output/map-click-fix-check/result.json`，`firstClickSelected=true` 且 `secondClickSelectedAfterDrag=true`）。
+- [context] 新需求：将 RPG 从主项目中剥离为独立项目，并整体换风格。
+- [impl] 新增独立项目目录：`rpg-standalone/`
+  - `index.html`：独立入口与 UI 布局
+  - `styles.css`：全新霓虹科幻视觉风格（非原浅绿风）
+  - `game.js`：独立玩法循环（移动/自动攻击/刷怪/掉落/升级/失败重开）
+  - `README.md`：运行说明与操作说明
+- [impl] 独立项目补齐自动化接口：`window.render_game_to_text` 与 `window.advanceTime(ms)`。
+- [test] 启动独立项目静态服务：`python3 -m http.server 4280 --directory rpg-standalone`。
+- [test] Playwright 客户端回归通过（URL: `http://127.0.0.1:4280/`）：
+  - 产物：`output/web-game/shot-0.png`、`output/web-game/state-0.json`
+  - 状态确认：移动后坐标变化、敌人/子弹/击杀计数均有变化。
+- [test] 额外整页验证：`output/rpg-standalone-full.png`，并确认 `window.render_game_to_text` / `window.advanceTime(ms)` 均可用。
+- [fix] 处理“RPG 页面打不开”问题：
+  - 新增脚本 `npm run rpg:standalone`（5900 端口）
+  - 更新 `rpg-standalone/README.md` 为 5900 启动说明
+  - 排查确认：5900 无监听时必定打不开；启动后 `http://127.0.0.1:5900/` 与 `http://localhost:5900/` 均返回 200。
+- [fix] 修复 standalone RPG “资源未加载/画面被遮罩”问题：
+  - 根因：`.levelup` 的 `display:grid` 覆盖了 `hidden` 属性，升级遮罩常驻。
+  - 修复：在 `rpg-standalone/styles.css` 增加 `.levelup[hidden] { display: none; }`。
+- [test] 5900 复测通过：
+  - `levelup-modal` 为 hidden，`mode=playing`。
+  - 截图：`output/rpg-resource-check-fixed.png`（已恢复正常游戏画面）。
+- [context] 用户要求“素材全部搬运到 standalone”，并建议从 OGA page=22 补充素材。
+- [impl] 素材搬运到独立项目：
+  - 复制 `public/static/assets/rpg` -> `rpg-standalone/static/assets/rpg`（46M）
+  - 复制 `public/static/assets/npc` -> `rpg-standalone/static/assets/npc`（1.0M）
+- [impl] 从 OGA page=22 新增 CC0 素材：
+  - `generic-items`（kenney_genericItems_updatedCross.zip）
+  - `pixel-fx-pack`（pixel_effects.zip）
+  - `fantasy-tiles`（fantasy_tiles.png）
+  - 路径：`rpg-standalone/static/assets/rpg/oga-page22/{raw,extracted}`
+- [impl] 重写 `rpg-standalone/game.js` 资源管线：
+  - 资产预加载 + 失败回退
+  - 玩家/NPC、敌人、掉落、特效改为贴图渲染
+  - 地块改为素材驱动并叠加 fantasy tile
+  - `render_game_to_text` 增加 `assetsLoaded/loadedAssetCount/enemy kind`
+- [docs] 新增 `rpg-standalone/static/assets/ATTRIBUTION.md`，记录来源页与许可证。
+- [test] E2E 验证通过（5900）：
+  - `assetsLoaded=true`，`loadedAssetCount=19`
+  - 截图：`output/rpg-standalone-assets-migrated.png`
+- [context] 新需求：做“吸血鬼幸存者风格”，并支持武器合成/进化。
+- [impl] 在 `rpg-standalone/game.js` 完成武器生态重构：
+  - 新增武器池：`奥术飞弹`、`符文环刃`、`余烬法杖`
+  - 新增被动池：`咒术典籍`、`钛合金臂铠`、`贪婪王冠`、`鲜血瓶`
+  - 新增合成配方：
+    - `奥术飞弹 Lv5 + 咒术典籍 Lv4 -> 日蚀法典`
+    - `符文环刃 Lv5 + 钛合金臂铠 Lv4 -> 虚空光环`
+  - 升级面板改为动态三选一（武器/被动/进化/通用强化混合池）
+  - 新增环刃碰撞伤害、陨火范围伤害、飞弹参数化发射
+  - `render_game_to_text` 增加 `weapons/passives/orbitOrbCount/pickupRadius`
+- [impl] 在 `rpg-standalone/index.html` 更新标题文案为“吸血鬼幸存者：武器合成版”，并更新缓存版本号参数。
+- [test] `node --check rpg-standalone/game.js` 通过。
+- [test] Playwright 客户端回归（port 5900）成功产出：`output/web-game/shot-0.png`、`output/web-game/state-0.json`。
+- [test] 状态验证到 `mode=levelup` 且 `levelUpChoices` 已含新池条目（示例：`passive_new_bracer`、`weapon_new_runic_orb`）。
+- [todo] 自动化长回合在当前环境偶发挂起，后续建议补一条更短的“升级后按键选项 + 继续 120 帧”稳定脚本，专门验证进化武器触发后的表现。
+- [impl] 按“更像原版”的要求新增宝箱进化链路（`rpg-standalone/game.js`）：
+  - 精英怪系统：`spawnEnemy` 增加 elite 判定（每 10 只保底 1 只 + 概率），精英拥有更高血量/体型/接触伤害
+  - 精英死亡掉落宝箱（`state.chests`）
+  - 角色靠近自动吸附拾取宝箱并 `openChest()`
+  - 开箱逻辑：
+    - 若满足配方条件，优先进化（`readyEvolutionRecipes` + `applyEvolution`）
+    - 否则发放保底奖励（武器+1 / 被动+1 / 生命奖励）
+  - 新增调试统计：`chestsOpened`、`chestCount`、`readyEvolutions`、敌人 `elite` 标记
+- [test] Playwright 回归（5900）验证：`output/web-game/state-0.json` 中出现 `chestsOpened: 1`，说明开箱链路实际触发。
+- [impl] UI 细节优化（`rpg-standalone/styles.css`）：
+  - 顶部栏、状态卡、升级卡做圆角+内描边+景深阴影，整体层次更清晰
+  - 背景改为多层渐变/光照，减少“平铺感”
+  - 面板间距、按钮触感和色调统一，视觉更精致
+- [impl] 命中特效缩小（`rpg-standalone/game.js`）：
+  - `emitFx` hit/death 生命周期和 scale 下调
+  - `drawFx` 动画增长/透明度下调，防止击中时过于炸屏
+  - hit 粒子数量下调（子弹命中、环刃命中、陨火命中）
+- [impl] 缓存版本更新（`rpg-standalone/index.html`）：`ui-polish-20260305-1`
+- [test] `node --check rpg-standalone/game.js` 通过。
+- [test] Playwright 回归已生成：`output/web-game/shot-0.png`、`output/web-game/state-0.json`（UI/战斗循环正常）。
+- [impl] 第二轮继续优化（`rpg-standalone/styles.css` + `rpg-standalone/game.js`）：
+  - UI 进一步提纯：卡片/面板色调降噪、玻璃线高光、顶部栏细节遮罩，提升质感与可读性
+  - 命中特效进入“低预算模式”：新增 `MAX_SPARKS`/`MAX_FX_BURSTS` 上限，hit 特效缩小并在拥挤时自动丢弃
+  - 火花速度、寿命、像素尺寸进一步下调（更轻量，不遮挡战斗信息）
+- [impl] 缓存版本号更新：`ui-polish-20260306-1`（`rpg-standalone/index.html`）
+- [test] `node --check rpg-standalone/game.js` 通过。
+- [test] Playwright 回归通过，输出：`output/web-game/shot-0.png`、`output/web-game/state-0.json`。
+- [context] 新需求：把 `AI Town` 与 `MiroFish` GitHub 项目的图谱构建流程接起来，不仅仅读取已有 graph data，还要支持“上传文档 -> 生成本体 -> 构建图谱 -> 任务轮询 -> 同步人物”。
+- [impl] `src/components/Map/VillageMap.tsx` 扩展 MiroFish 工作流数据模型：
+  - 新增 `MiroFishProjectData`、`MiroFishTaskData`、`MiroFishBuildLaunch` 等类型
+  - 新增 `unwrapMiroFishPayload` / `parseMiroFishProjectData` / `parseMiroFishTaskData` / `parseMiroFishBuildLaunch`
+  - 新增本地持久化键：`project-id`、`task-id`
+- [impl] 在地图高级面板内接入完整 MiroFish 工作流：
+  - 新增项目名、模拟需求、补充上下文、文件上传、chunk size / overlap 表单
+  - 新增接口动作：`/api/graph/ontology/generate`、`/api/graph/build`、`/api/graph/project/:id`、`/api/graph/task/:id`
+  - 新增自动轮询任务进度，任务完成后自动刷新项目并调用已有 graph sync，把节点投射为小镇可点击人物
+  - 支持手动填写 / 刷新 `projectId`、`taskId`、`graphId`
+- [impl] 新增 MiroFish 面板可视化：
+  - 项目状态 / 任务状态 / 图谱统计
+  - 文件 pill 列表
+  - 任务进度条
+  - 项目摘要卡（analysis summary、文件数、实体类型数、关系类型数、文本长度）
+- [test] `npm run build` 通过。
+- [test] Playwright 客户端跑通（URL `/map`），输出截图：`output/web-game-mirofish/shot-0.png`、`output/web-game-mirofish/shot-1.png`。
+- [test] 额外 Playwright 页面回归通过：
+  - 高级面板截图：`output/mirofish-panel-advanced.png`
+  - 交互冒烟：`Generate Ontology` 在无文件时正确返回校验提示，`Build Graph` 在无项目时保持 disabled，控制台/页面无新错误。
+- [todo] 目前已打通 Graph Build 主链路，但还没接 GitHub 仓库里的 simulation / report / deep interaction 三段；下一步可以继续把 `simulation/create`、report 和对话能力投进小镇 UI。
+- [context] 新需求：继续强化 AI Town 与 MiroFish 的图谱联动，要求不只是导入人物，还要能在地图内看出关系并可点击跳转。
+- [impl] `src/components/Map/VillageMap.tsx` 新增图谱关系连接模型 `MiroFishGraphConnection`，并将同步逻辑升级为：
+  - 过滤低价值 `MENTIONS` 边
+  - 为每个图谱人物记录 `connections`、邻居数、入度/出度
+  - 同步完成后默认选中“关系最多”的图谱节点，而不是盲选第一个节点
+- [impl] 地图 canvas 新增图谱关系可视层：
+  - 选中/悬停图谱人物时绘制关系线
+  - 邻居节点做边框与底部高亮
+  - 关系线中段显示 edge type 标签
+- [impl] 右侧 `Selected` 卡片新增图谱邻居列表：
+  - 展示方向、关系类型、fact 文本
+  - 点击邻居按钮会切换选中对象并重新定位镜头
+- [impl] 相机行为修正：当选中图谱人物时，暂停原本对受控角色的自动跟随，避免镜头被拽回玩家。
+- [impl] 地图页新增自动化调试接口：`window.render_game_to_text()` 输出当前图谱选中状态、邻居、viewport 信息；保留外部 Playwright 注入的 `advanceTime`。
+- [test] `npm run build` 通过。
+- [test] 使用 Railway 上的真实 MiroFish API 构建测试图谱并联调成功：
+  - 自动同步后默认选中 `Pixel Town`，`render_game_to_text` 返回 `neighborCount: 4`
+  - 点击关系列表中的 `Bob` 后，选中状态切换成功，`render_game_to_text` 返回 Bob 的 3 条连接
+- [test] Playwright + 整页截图产物：
+  - `output/mirofish-map-page-advanced.png`
+  - `output/mirofish-map-page-after-click.png`
+  - `output/mirofish-map-canvas-selected.png`
+  - `output/mirofish-map-canvas-after-click.png`
+- [todo] 下一步可继续接 MiroFish simulation/report/interactions，把图谱节点状态变化实时回写到小镇 NPC 行为与台词。
+- [impl] Binance AI Town 第二层语义改造已落地：
+  - 首页 / 导航 / 地图统一切到 Binance 市场语义，导航改为 `Market / Vault / Rewards / Docs`
+  - 地图分区重命名为 `Spot Plaza / Launch District / Research Arcade / Liquidity Ring / BNB Forest Edge`
+  - Adventure / Supply / Expansion 等任务文本切换为 `Alpha / Signal / Market Expansion` 语义
+  - 地标 lore、动作按钮、CZ / HEYI 角色身份卡同步切到 Binance AI Town 设定
+  - biome 标签改为 `Research Belt / Launch Sands / Risk Glacier`
+- [test] `npm run build` 通过，页面截图回归产物：`output/binance-ai-town-home.png`、`output/binance-ai-town-map.png`。
+- [context] 新需求：让 Binance AI Town 不只是换皮，而是接入真实 Binance 行情，实时影响地图与 NPC 行为。
+- [impl] `src/components/Map/VillageMap.tsx` 已接入 Binance 公共行情脉冲：
+  - 新增 `BTCUSDT / BNBUSDT / ETHUSDT / SOLUSDT` 轮询与回退端点（`data-api.binance.vision` -> `api.binance.com`）
+  - 根据 BTC/BNB 24h 变化计算 `risk-on / risk-off / rotation / volatile` 四种市场 regime
+  - 产出 `heatScore / riskScore / leader pair`，并写入 `window.render_game_to_text().market`
+- [impl] 地图 UI 与 NPC 已同步接入市场脉冲：
+  - 顶部 Header 增加 market chip，直接显示当前 regime 和领涨/领跌主币
+  - `MARKET OPS / BNB-578` 增加 `Market Pulse / Lead Pair / BTC 24h / BNB 24h / Market Heat / Risk Meter`
+  - 新增 `Binance Market Feed` 卡片，显示状态与更新时间
+  - 非图谱 NPC 的 `status / thought` 会随 market regime 切换
+  - 图谱 NPC 的 simulation/report projection 叠加 market lens
+  - 角色弹窗和右侧 Selected 卡增加 `Market Input / Market Pulse` 文案
+- [test] `npm run build` 再次通过。
+- [test] 浏览器与自动化验证通过：
+  - `output/market-pulse-check/shot-0.png`
+  - `output/market-pulse-check/state-0.json`
+  - `output/binance-market-page/page.png`
+  - `output/binance-market-page/state.json`
+  - 已确认截图中能看到 Header market chip、`MARKET OPS` 行情行、`Binance Market Feed` 卡。
+- [todo] 下一步可以继续把 market pulse 更深地投到地图玩法：
+  - `risk-on` 时提高探索/任务奖励
+  - `risk-off` 时增强风控 NPC 与避险提示
+  - 用不同赛道热度驱动 `Spot / Launch / Research / Liquidity` 区域事件刷新
+- [context] 新需求：高级面板太复杂，需要更傻瓜；先隐藏 Vault；顶部增加更直接的 BNB 信息。
+- [impl] 导航与首页入口收敛：
+  - 顶部导航移除 `Vault`
+  - 首页第三入口改为 `Rewards Hub`
+  - `Live Status` 中的 `Strategy Vault` 改为 `BNB Chain / Mainnet Connected`
+- [impl] 地图顶部加入更直接的 BNB 行情信息：
+  - Header 新增 `BNB price / BNB 24h / BNB volume / BTC price` chips
+  - 继续保留 market regime 主 chip
+- [impl] 高级面板改为默认简洁模式：
+  - `MARKET OPS` 新增说明栏与 `Show Expert Tools / Hide Expert Tools`
+  - 默认仅保留核心行情、当前分区、市场扩张、任务卡、选中卡
+  - `SettingsPanel`、合约地址、NFT 放置、证明/日志、Alpha Runtime、Binance Graph Link 等重工具折叠到 expert 模式
+  - 通过 `expert-only` 样式隐藏低优先级指标，避免首次打开信息过载
+- [test] `npm run build` 通过。
+- [test] 新前端进程在 `http://127.0.0.1:5902` 验证通过：
+  - 首页截图：`output/binance-simple-ui-5902/home.png`
+  - 地图高级面板截图：`output/binance-simple-ui-5902/map-advanced.png`
+  - 状态：`output/binance-simple-ui-5902/map-state.json`
+  - 已确认 `Vault` 隐藏、顶部 BNB 信息增强、默认高级面板明显简化。
+- [context] 新需求：顶部继续做成更像交易终端的 `BNB ticker bar`。
+- [impl] 地图 Header 已升级为终端风格 ticker：
+  - 主体改成单条深色终端条而不是多个浅色 chip
+  - 连续展示 `BNBUSDT / LAST / 24H / HIGH / LOW / VOL / BTC / REGIME`
+  - 继续保留一条 regime headline，顶部同时有情绪概览和交易终端读数
+- [test] `npm run build` 再次通过。
+- [test] 终端顶栏截图：`output/binance-terminal-topbar/map-topbar.png`
+- [context] 新需求：把公开 BNB / BNB Chain 数据真正接入 Binance AI Town，让顶部更像交易终端，并让 NPC 对链上状态有反应。
+- [impl] `/Users/tommy/clawd/generative-agents-ts/src/components/Map/VillageMap.tsx` 新增 `ChainPulse` 数据层：
+  - 接入 BSC Mainnet 公共 RPC（`bsc-dataseed-public.bnbchain.org` / `bsc-dataseed.bnbchain.org`）
+  - 接入 `opbnb-mainnet-rpc.bnbchain.org`
+  - 实时抓取 `eth_gasPrice` 与 `eth_getBlockByNumber(latest)`，生成统一 `chainPulse`
+  - 产出 `balanced / mainnet-busy / opbnb-sprint / sync-watch` 链上模式
+- [impl] 顶部 ticker 升级为“市场 + 链上”终端栏：
+  - 保留 `BNBUSDT` 价格与 24h
+  - 新增 `BSC GAS / BSC BLK / BSC AGE / opBNB GAS / opBNB AGE / MODE`
+  - 顶部新增独立 `BNB Chain Pulse` chip
+- [impl] 简洁高级面板新增链上信息：
+  - `Chain Mode / BSC Gas / BSC Load / opBNB Gas / opBNB Load / Chain Activity / Chain Pressure`
+  - 新增单独卡片 `BNB Chain Pulse`
+  - 简洁摘要改为 `market + chain` 组合 world headline
+- [impl] NPC 行为增强：
+  - 普通 NPC 会根据 `marketPulse + chainPulse` 自动切换 `intent`（如 `observe / trade / farm / chat / rest`）
+  - 思考文本会响应 `BSC 拥堵 / opBNB 快车道 / 链上同步观察`
+  - 图谱 NPC projection 也叠加链上 lens，并在链上模式变化时调整 `motion`
+- [impl] 人物资料卡与 `render_game_to_text` 新增链上上下文：
+  - 状态 JSON 现在包含 `chain.mode / headline / activityScore / pressureScore / networks[]`
+  - NPC / Graph 弹窗里新增 `Chain Pulse / Chain Context`
+- [test] `npm run build` 通过。
+- [test] 真实页面截图验证通过：
+  - `/Users/tommy/clawd/generative-agents-ts/output/playwright/bnb-chain-page-default.png`
+  - `/Users/tommy/clawd/generative-agents-ts/output/playwright/bnb-chain-page-advanced.png`
+- [test] 自动化状态输出验证通过：
+  - `/Users/tommy/clawd/generative-agents-ts/output/playwright/bnb-chain-live-default/state-0.json`
+  - `/Users/tommy/clawd/generative-agents-ts/output/playwright/bnb-chain-page-advanced-state.json`
+- [todo] 下一步可以继续把 `chainPulse` 做成真正的地图事件系统，比如 `BSC fee spike` 触发风控任务、`opBNB sprint` 提高 Launch 区刷新率。
+- [impl] 第二轮 BNB 数据接入：新增 `BNB World Event` 轻事件系统，按 `marketPulse + chainPulse` 派生 `BSC Fee Spike / opBNB Fast Lane / Chain Sync Watch / Liquidity Parade` 等事件。
+- [impl] 世界事件现已影响真实玩法参数：
+  - Alpha 任务完成奖励倍率与市场扩张推进量
+  - 地图补给目标数量（`lootCountTarget`）
+  - 地图挑战敌人数量（`enemyCountTarget`）
+  - NPC 移动速度与决策节奏（`npcSpeedMultiplier`）
+- [impl] Binance 行情升级为 `WebSocket 优先 + REST fallback`：
+  - 使用 `data-stream.binance.vision` 的 `miniTicker` stream 更新 `BTCUSDT/BNBUSDT/ETHUSDT/SOLUSDT`
+  - 初始快照仍保留 REST 拉取，WebSocket 负责更快增量刷新
+- [impl] UI 新增世界事件露出：
+  - `MARKET OPS` 中新增 `World Event` 与 `Quest Boost`
+  - 新增单独 `World Event` 卡片
+  - Play HUD 增加事件提示行
+- [impl] `render_game_to_text` 新增 `worldEvent` 输出，包含 `id/title/detail/tone/questRewardMultiplier/questProgressBonus/lootCountTarget/enemyCountTarget/npcSpeedMultiplier`
+- [test] `npm run build` 再次通过。
+- [test] 页面截图已更新：
+  - `/Users/tommy/clawd/generative-agents-ts/output/playwright/bnb-world-event-default.png`
+  - `/Users/tommy/clawd/generative-agents-ts/output/playwright/bnb-world-event-advanced.png`
+- [test] 状态输出验证 `worldEvent` 生效：
+  - `/Users/tommy/clawd/generative-agents-ts/output/playwright/bnb-world-event-default-state.json`
+  - `/Users/tommy/clawd/generative-agents-ts/output/playwright/bnb-world-event-advanced-state.json`
+- [todo] 下一步可以把 `World Event` 再下沉到地图局部区域，例如只让 `Launch District` 在 `opBNB Fast Lane` 期间提高刷新率，而不是全图统一增益。
+- [impl] 按用户反馈新增 `BNB Action Brief` 实用卡，弱化 `opBNB` 在默认视图中的露出：
+  - 建议仅基于 `BNB 24h + BSC gas + BSC block age + 市场 regime`
+  - 直接给出 `Network / Suggested Zone / Action / Risk / Note`
+- [impl] 默认简洁面板调整：
+  - `opBNB Gas / opBNB Load` 移到 `expert-only`
+  - 新增 `Suggested Zone / Risk`
+  - 新增单独卡片 `BNB Action Brief`
+- [impl] `render_game_to_text` 新增 `actionBrief` 输出，便于后续自动跳转/自动验收。
+- [test] 页面截图：`/Users/tommy/clawd/generative-agents-ts/output/playwright/bnb-action-brief-advanced.png`
+- [test] 状态输出：`/Users/tommy/clawd/generative-agents-ts/output/playwright/bnb-action-brief-state.json`
+- [todo] 下一步可直接把 `BNB Action Brief` 变成交互动作，例如点击后自动高亮推荐区域或把镜头移动到建议区域。
+- 2026-03-18: Added `BNB Action Brief` navigation in `/Users/tommy/clawd/generative-agents-ts/src/components/Map/VillageMap.tsx` so the brief card now focuses the camera on a recommended district/landmark anchor and records focus metadata in `render_game_to_text()`.
+- 2026-03-18: Added a pulsing suggested-zone overlay plus temporary camera lock to avoid the play-camera immediately snapping back after clicking the brief card.
+- 2026-03-18: Verified with browser automation on `http://127.0.0.1:5902/map`; scroll delta changed from `{left: 6587, top: 4795}` to `{left: 5403, top: 4073}` after clicking the brief card. Artifacts: `/Users/tommy/clawd/generative-agents-ts/output/playwright/bnb-action-brief-focus-before.json`, `/Users/tommy/clawd/generative-agents-ts/output/playwright/bnb-action-brief-focus-after.json`, `/Users/tommy/clawd/generative-agents-ts/output/playwright/bnb-action-brief-focus.png`, `/Users/tommy/clawd/generative-agents-ts/output/playwright/bnb-action-brief-focus-canvas.png`.
+- 2026-03-18: Expanded `BNB Action Brief` into a practical route card. Clicking it now reveals a three-step recommended task plan tied to the current Alpha task and market objective. State is exported in `render_game_to_text()` as `actionBrief.taskExpanded` and `actionBrief.taskPlan`.
+- 2026-03-18: Added off-screen suggested-zone edge arrows in the canvas renderer so users get directional guidance when the recommended zone is outside the viewport.
+- 2026-03-18: Verified the expanded task route on `http://127.0.0.1:5902/map`. Artifacts: `/Users/tommy/clawd/generative-agents-ts/output/playwright/bnb-action-brief-route-state.json`, `/Users/tommy/clawd/generative-agents-ts/output/playwright/bnb-action-brief-route-page.png`, `/Users/tommy/clawd/generative-agents-ts/output/playwright/bnb-action-brief-route-canvas.png`.
+- 2026-03-18: Removed all `opBNB` references from `/Users/tommy/clawd/generative-agents-ts/src/components/Map/VillageMap.tsx`. Chain pulse now tracks only `BNB Smart Chain` mainnet, and the ticker/panels/NPC reasoning no longer mention dual-chain or opBNB fast-lane states.
+- 2026-03-18: Verified BNB-only mode with browser automation. Artifacts: `/Users/tommy/clawd/generative-agents-ts/output/playwright/bnb-only-state.json`, `/Users/tommy/clawd/generative-agents-ts/output/playwright/bnb-only-page.png`.
+- 2026-03-18: Added a floating `BSC Live Talk` window to `/Users/tommy/clawd/generative-agents-ts/src/components/Map/VillageMap.tsx`. It streams lightweight NPC dialogue based on `marketPulse`, `chainPulse`, `worldEvent`, and the current `BNB Action Brief`, and exports the transcript through `render_game_to_text()` as `npcLiveChat`.
+- 2026-03-18: Stabilized the live chat timer by moving market/chain context into a ref so Binance WebSocket updates no longer reset the message interval before new dialogue appears.
+- 2026-03-18: Verified the live BSC NPC chat on `http://127.0.0.1:5902/map`. Artifacts: `/Users/tommy/clawd/generative-agents-ts/output/playwright/bsc-live-chat-state-before.json`, `/Users/tommy/clawd/generative-agents-ts/output/playwright/bsc-live-chat-state-after.json`, `/Users/tommy/clawd/generative-agents-ts/output/playwright/bsc-live-chat-dom.json`, `/Users/tommy/clawd/generative-agents-ts/output/playwright/bsc-live-chat-map.png`.
+- 2026-03-18: Integrated Binance Skills Hub data for BSC into `/Users/tommy/clawd/generative-agents-ts/src/components/Map/VillageMap.tsx` using public Binance Web3 endpoints:
+  - Alpha rank: `/wallet/market/token/pulse/unified/rank/list`
+  - Smart money inflow: `/tracker/wallet/token/inflow/rank/query`
+  - Social hype leaderboard: `/wallet/market/token/pulse/social/hype/rank/leaderboard`
+- 2026-03-18: Added `Binance Skills Watch` to the `MARKET OPS` panel and exposed `skills` in `render_game_to_text()`, including `alphaTop`, `smartMoneyTop`, and `socialTop`.
+- 2026-03-18: Extended `BSC Live Talk` so NPCs now mention concrete Skills-derived tokens from Alpha, Smart Money, and Social Hype instead of only generic market/chain commentary.
+- 2026-03-18: Verified Skills integration on `http://127.0.0.1:5902/map`. Artifacts: `/Users/tommy/clawd/generative-agents-ts/output/playwright/binance-skills-town-state.json`, `/Users/tommy/clawd/generative-agents-ts/output/playwright/binance-skills-town-map.png`.
+- 2026-03-18: Turned Binance Skills data into clickable `Skills Missions` in `/Users/tommy/clawd/generative-agents-ts/src/components/Map/VillageMap.tsx`. Missions now map Alpha, Smart Money, and Social Hype signals into concrete zones plus 3-step execution routes.
+- 2026-03-18: Clicking a Skills mission now focuses the map on its target district, marks the mission active in `render_game_to_text()`, and posts a notice in the right-side control panel.
+- 2026-03-18: Verified Skills mission activation on `http://127.0.0.1:5902/map`. Artifacts: `/Users/tommy/clawd/generative-agents-ts/output/playwright/binance-skills-mission-before.json`, `/Users/tommy/clawd/generative-agents-ts/output/playwright/binance-skills-mission-after.json`, `/Users/tommy/clawd/generative-agents-ts/output/playwright/binance-skills-mission-map.png`.
+- 2026-03-18: Added an on-map token mission beacon for the active Skills mission in `/Users/tommy/clawd/generative-agents-ts/src/components/Map/VillageMap.tsx`, plus a bottom overlay line that shows the current mission token and target district while the mission is active.
+- 2026-03-18: Verified the active Skills mission beacon/state on `http://127.0.0.1:5902/map`. Artifacts: `/Users/tommy/clawd/generative-agents-ts/output/playwright/binance-skills-mission-beacon-state.json`, `/Users/tommy/clawd/generative-agents-ts/output/playwright/binance-skills-mission-beacon-map.png`, `/Users/tommy/clawd/generative-agents-ts/output/playwright/binance-skills-mission-canvas.png`.
+- 2026-03-18: Added a reusable `Guest NPC Dock` to `/Users/tommy/clawd/generative-agents-ts/src/components/Map/VillageMap.tsx` for third-party character onboarding. Users can now one-click add a `小龙虾` sample guest or paste short JSON to import guest NPCs, persist them in `ga:map:guest-agents-v1`, and spawn them as roaming map agents with custom title/topic/zone metadata.
+- 2026-03-18: Extended map agent rendering/profile/chat flows for guest characters in `/Users/tommy/clawd/generative-agents-ts/src/components/Map/VillageMap.tsx`: guest NPCs now get a dedicated badge/color treatment, custom profile content, exported `guestDock` state in `render_game_to_text()`, immediate `BSC Live Talk` join messages, and nearby-chat lines that reference their topic.
+- 2026-03-18: Added `Focus` controls for guest NPCs in the dock UI so a newly imported guest can be selected and centered on the map without hunting through the full canvas manually. Playwright verification artifacts: `/Users/tommy/clawd/generative-agents-ts/output/playwright/guest-dock-verify/state.json`, `/Users/tommy/clawd/generative-agents-ts/output/playwright/guest-dock-focus/state.json`, `/Users/tommy/clawd/generative-agents-ts/output/playwright/guest-dock-focus/page.png`.
+- 2026-03-18: Added a new `/office` route and `/Users/tommy/clawd/generative-agents-ts/src/pages/LobsterOfficePage.tsx`, inspired by Star-Office-UI. The page uses copied Star Office background/reference assets from `/Users/tommy/clawd/generative-agents-ts/public/star-office/` and renders synced guest NPCs from `ga:map:guest-agents-v1` as office staff discussing BSC state.
+- 2026-03-18: Lobster Office now polls BNB price, BSC RPC health, and Binance Skills endpoints, derives desk assignments (`writing/researching/syncing/idle/error`), exposes `window.render_game_to_text()` plus `window.advanceTime(ms)`, and streams a lightweight live office chat tied to the selected Lobster guests.
+- 2026-03-18: Removed the user-facing Rewards entry from navigation/home and replaced it with the Office entry. `/Users/tommy/clawd/generative-agents-ts/src/App.tsx` now routes `/lottery` to `/office`, `/Users/tommy/clawd/generative-agents-ts/src/components/Navigation.tsx` surfaces `Office`, and `/Users/tommy/clawd/generative-agents-ts/src/pages/HomePage.tsx` points the third quick action to `Lobster Office`.
+- 2026-03-18: Verified the Office page with the develop-web-game Playwright client on `http://127.0.0.1:5904/office`. Artifacts: `/Users/tommy/clawd/generative-agents-ts/output/playwright/lobster-office/state-0.json`, `/Users/tommy/clawd/generative-agents-ts/output/playwright/lobster-office/state-1.json`, `/Users/tommy/clawd/generative-agents-ts/output/playwright/lobster-office/shot-0.png`, `/Users/tommy/clawd/generative-agents-ts/output/playwright/lobster-office/shot-1.png`.
+- [todo] If we keep expanding Lobster Office, the next high-value step is wiring map-side `BSC Live Talk` / `Skills Missions` into office task boards so selecting a token mission on the map also lights up a desk or board card in the office.
+- 2026-03-18: Refined `/Users/tommy/clawd/generative-agents-ts/src/pages/LobsterOfficePage.tsx` layout after visual review. Moved `Live Office Talk` to the first sidebar panel and made it sticky on desktop so conversation stays visible higher on the page.
+- 2026-03-18: Wired Star-Office-UI material layers more explicitly into the office stage: added low-opacity `room-reference.webp` overlay plus positioned `desk-v3.webp` and a cropped `coffee-machine-v3-grid.webp` prop so the office uses more than just the background image.
+- 2026-03-18: Re-verified the refreshed office page on `http://127.0.0.1:5904/office`. Artifacts: `/Users/tommy/clawd/generative-agents-ts/output/playwright/lobster-office-refresh/state-0.json`, `/Users/tommy/clawd/generative-agents-ts/output/playwright/lobster-office-refresh/state-1.json`, `/Users/tommy/clawd/generative-agents-ts/output/playwright/lobster-office-refresh/shot-1.png`.
+- 2026-03-18: Wired `/office` to a real Star Office backend path. `/Users/tommy/clawd/generative-agents-ts/src/pages/LobsterOfficePage.tsx` now supports backend config (`baseUrl`, `joinKey`, enable toggle), polls `/status` + `/agents`, calls real `/join-agent` + `/agent-push`, persists remote registrations locally, and prefers backend-sourced agents in the office roster.
+- 2026-03-18: Added a Vercel serverless proxy at `/Users/tommy/clawd/generative-agents-ts/api/star-office/[...path].ts` for `status`, `agents`, `join-agent`, `agent-push`, and `leave-agent`. Added Vite dev proxy in `/Users/tommy/clawd/generative-agents-ts/vite.config.ts` so local `/api/star-office/*` forwards to `STAR_OFFICE_API_BASE` or `http://127.0.0.1:19000` by default.
+- 2026-03-18: Verified end-to-end office backend sync locally against `/Users/tommy/Downloads/Star-Office-UI-master/backend/app.py` on port `19000`. Browser test from `/office` successfully created `办公室测试龙虾` through `join-agent`, pushed status through `agent-push`, and confirmed the remote agent in `/agents` plus `render_game_to_text`. Artifacts: `/Users/tommy/clawd/generative-agents-ts/output/playwright/star-office-backend-connect/page.png`, `/Users/tommy/clawd/generative-agents-ts/output/playwright/star-office-backend-connect/state.json`.
+
+- [fix] 主小镇地图去掉随机建筑装饰，仅保留自然/灯光装饰；固定地标在主小镇改为轻量标记，避免和原始 tilemap 建筑位置冲突。
+- [test] `npm run build` 重新验证中。
+
+- [ux] 地图右上角 BSC Live Talk 明确标为只读播报窗，新增说明文案与“和当前选中 NPC 对话”快捷按钮，避免误以为可直接输入。
+
+- [fix] 修复地图 NPC 私聊输入框被实时 agent 刷新重置的问题：只在切换 NPC 或重新打开资料卡时清空 draft，不再随同一 NPC 的状态刷新清空输入。
+
+- [deploy] 已将带 /npc-chat 的 Star Office 后端重新部署到 Railway：star-office-backend / production / star-office-api。
+- [test] 线上验证通过：/npc-chat 与 /office-chat 均返回 bankofai / gpt-5.2。
+
+- 2026-03-20: Added a BSC Query Desk to /Users/tommy/clawd/generative-agents-ts/src/components/Map/VillageMap.tsx to mirror read-only bnbchain-skills capabilities inside the town. Users can now query the latest BSC block, analyze an address (EOA vs contract + BNB balance + tx count), read ERC20 metadata, and inspect ERC20 balances from the map panel using public BSC RPC endpoints. Verified with npm run build.
+
+- 2026-03-20: Upgraded Lobster Office character presentation in /Users/tommy/clawd/generative-agents-ts/src/pages/LobsterOfficePage.tsx. Office guests now render with role badges, accent shells, accessory markers, desk chips, selected speech bubbles, and a richer selected-profile summary so lobsters read more like office characters instead of plain emoji buttons. Verified with npm run build.
+
+- 2026-03-20: Refined Lobster Office agents further in /Users/tommy/clawd/generative-agents-ts/src/pages/LobsterOfficePage.tsx. Added role/accessory visuals, in-station drift offsets, selected-speaker priority for office chat, and a stronger live-selected badge so the active lobster reads as the room lead. Verified with npm run build.
+- 2026-03-20: Added direct office-side chat for selected lobsters in /Users/tommy/clawd/generative-agents-ts/src/pages/LobsterOfficePage.tsx. Local lobsters can now be asked questions directly inside /office without using join-agent. The panel seeds each selected lobster with a greeting, sends prompts to /npc-chat through the existing Star Office API path, falls back gracefully, and exposes chat state in render_game_to_text. Verified with npm run build and a Playwright smoke test saved to output/playwright/lobster-office-direct-chat.png.
+- [impl] 为 `Skills Missions` 增加轻量任务闭环（`/Users/tommy/clawd/generative-agents-ts/src/components/Map/VillageMap.tsx`）：
+  - 新增任务完成状态持久化（`ga:map:skills-missions-v1`）
+  - 新增任务奖励（Intel / Merit）与汇总卡
+  - 新增任务完成提示条与“下一条推荐”
+  - 完成任务后自动切到下一条未完成任务
+  - 为任务卡增加完成态样式、奖励行和“标记完成”按钮
+  - `render_game_to_text()` 输出任务完成态、奖励 totals、下一条推荐和 reward notice
+- [test] `npm run build` 通过。
+- [test] 浏览器闭环验证通过：展开 `Advanced` 后点击第一条 `Skills Mission` 并标记完成，状态从 `alpha` 自动切到 `smart-money`，奖励变为 `Intel 12 / Merit 4`。
+- [artifact] 截图与状态：
+  - `/Users/tommy/clawd/generative-agents-ts/output/playwright/skills-mission-loop.png`
+  - `/Users/tommy/clawd/generative-agents-ts/output/playwright/skills-mission-loop-before.json`
+  - `/Users/tommy/clawd/generative-agents-ts/output/playwright/skills-mission-loop-after.json`
+- [impl] 为 `Skills Missions` 增加步骤勾选进度：
+  - 每条任务记录已勾选步骤索引，并持久化到 `ga:map:skills-missions-v1`
+  - 勾选步骤不会直接算整条任务完成
+  - 任务完成时会自动补全全部步骤并结算奖励
+  - 顶部汇总卡新增步骤/奖励展示，完成按钮在步骤全部勾选后文案变为 `Claim Rewards`
+- [test] 浏览器验证通过：
+  - 先勾选第一步后，`render_game_to_text().skills.activeMission.stepsDone = [0]`，但 totals 仍为 0
+  - 点击完成后，第一条任务完成、奖励结算、当前任务自动切到 `smart-money`
+- [artifact] 步骤验证产物：
+  - `/Users/tommy/clawd/generative-agents-ts/output/playwright/skills-mission-steps-loop.png`
+  - `/Users/tommy/clawd/generative-agents-ts/output/playwright/skills-mission-steps-mid.json`
+  - `/Users/tommy/clawd/generative-agents-ts/output/playwright/skills-mission-steps-after.json`
+
+- 2026-03-24 14:09 Refreshed /office UI: kept the office stage as the main canvas, moved backend/local onboarding panels into a lower dock grid, and promoted the current lobster + direct chat into a sticky right-side spotlight. Verified with `npm run build` and fresh screenshots at `output/playwright/office-ui-before.png` and `output/playwright/office-ui-after.png`.
+
+- 2026-03-24 14:22 Refined /office Desk Spotlight into a more chat-product style: added a selected lobster hero card, quick prompts, clearer chat hierarchy, and kept the onboarding forms below the fold. Verified with `npm run build` and `output/playwright/office-ui-after-v2.png`.
+
+- 2026-03-24 14:55 Reduced the Lobster Office scene footprint by replacing the oversized fixed stage height with a responsive clamp and slightly rebalancing the grid so the right-side spotlight has more room. Verified in `output/playwright/office-ui-stage-resized.png`.
+
+- [impl] 办公室右侧改成标签工作台（Desk / Talk / Brief），减少连续信息堆叠；新增 roster 搜索并在舞台/名单选中时自动切回值班视图。
+- [test] `npm run build` 通过。
